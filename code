@@ -1,0 +1,611 @@
+#Load file as a pandas dataframe
+
+from google.colab import files
+
+uploaded = files.upload()
+
+import pandas as pd
+df = pd.read_excel('A_II_Emotion_Data_Student_Copy_Final.xlsx')
+print(df.head())
+
+#Cleaning corrupted comments
+
+# Use a regular expression to match rows that contain only English letters, digits, spaces, and selected punctuation
+mask = df['text_reviews_'].str.match(r'^[A-Za-z0-9\s.,?!\'"-]*$')
+
+# Apply the mask to filter the DataFrame
+df = df[mask]
+
+# Display the filtered DataFrame to verify that rows with non-English characters have been removed while keeping numerics
+print(df)
+
+#Removing HTML tags, punctuation, and special characters.
+#Converting text to lowercase.
+
+import re
+import string
+import pandas as pd
+
+def clean_text(text):
+    # Remove HTML tags
+    text = re.sub(r'<.*?>', '', text)
+    # Remove punctuation and special characters
+    text = ''.join([char for char in text if char not in string.punctuation])
+    # Convert text to lowercase
+    text = text.lower()
+    return text
+
+# Apply the cleaning function to each row
+df['cleaned_reviews'] = df['text_reviews_'].apply(clean_text)
+
+# Display the DataFrame to verify changes
+print(df[['text_reviews_', 'cleaned_reviews']].head())
+
+  #Word Level Tokenization
+
+import nltk
+nltk.download('punkt')
+from nltk.tokenize import word_tokenize
+
+  def tokenize_text(text):
+    tokens = word_tokenize(text)
+    return tokens
+df['tokenized_reviews'] = df['cleaned_reviews'].apply(tokenize_text)
+
+# Display the DataFrame to verify changes
+print(df[['cleaned_reviews', 'tokenized_reviews']].head())
+
+
+  #Stop Word Removal
+
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+
+import nltk
+from nltk.corpus import stopwords
+
+nltk.download('punkt')
+nltk.download('stopwords')
+
+def remove_stopwords(tokens):
+    stop_words = set(stopwords.words('english'))
+    filtered_tokens = [word for word in tokens if word.lower() not in stop_words]
+    filtered_text = ' '.join(filtered_tokens)
+    return filtered_text
+
+df['no_stopwords'] = df['tokenized_reviews'].apply(remove_stopwords)
+
+print(df[['tokenized_reviews', 'no_stopwords']].head())
+
+
+#Stemming Words
+
+from nltk.stem import PorterStemmer
+
+def stem_text(text):
+
+    stemmer = PorterStemmer()
+
+    words = word_tokenize(text)
+
+
+    stemmed_words = [stemmer.stem(word) for word in words]
+
+
+    stemmed_text = ' '.join(stemmed_words)
+
+    return stemmed_text
+
+df['stemmed_text'] = df['no_stopwords'].apply(stem_text)
+
+# Display the DataFrame to verify changes
+print(df[['no_stopwords', 'stemmed_text']].head())
+
+
+#Lemitization
+
+import spacy
+
+# Load the spaCy model
+nlp = spacy.load("en_core_web_sm")
+
+def lemmatize_text(text):
+    # Create a spaCy document object
+    doc = nlp(text)
+    # Extract the lemmatized form of each word
+    lemmatized_text = ' '.join([token.lemma_ for token in doc])
+    return lemmatized_text
+
+# Apply the lemmatize_text function to each row in the 'stemmed_text' column
+df['lemmatized_text'] = df['stemmed_text'].apply(lemmatize_text)
+
+# Display the DataFrame to verify changes
+print(df[['stemmed_text', 'lemmatized_text']].head())
+
+print(df)
+
+#Bag of Words
+
+from sklearn.feature_extraction.text import CountVectorizer
+
+print(df['lemmatized_text'])
+
+
+# Initialize the CountVectorizer
+vectorizer = CountVectorizer()
+
+# Fit and transform the 'lemmatized_text' data to a bag of words representation
+X = vectorizer.fit_transform(df['lemmatized_text'])
+
+# Get the feature names, which corresponds to the vocabulary
+feature_names = vectorizer.get_feature_names_out()
+print(feature_names)
+
+# Convert the sparse matrix to a dense matrix
+X_dense = X.toarray()
+print(X_dense)
+
+
+# Create a new DataFrame with the BoW features
+bow_df = pd.DataFrame(X_dense, columns=feature_names)
+
+# Display the new DataFrame with the bag of words representation
+print(bow_df)
+
+#Removing columns that have numeric names
+
+# Filter out columns where the column name represents a numeric value
+bow_df = bow_df.loc[:, ~bow_df.columns.str.isnumeric()]
+
+bow_df = bow_df.loc[:, ~bow_df.columns.to_series().apply(lambda x: x.replace('.', '', 1).isdigit())]
+
+# Display the DataFrame to verify that numeric columns have been removed
+print(bow_df)
+
+  #Removing columns that have names starting with numeric
+
+bow_df = bow_df.loc[:, ~bow_df.columns.str.match(r'^\d+.*')]
+
+print(bow_df)
+
+  #Keeping only columns with column names present in the english dictionary
+
+nltk.download('words')
+
+# Load the set of English words from NLTK
+from nltk.corpus import words
+english_words = set(words.words())
+
+# Filter columns based on whether their names are in the English words set
+bow_df = bow_df.loc[:, bow_df.columns.isin(english_words)]
+
+# Display the DataFrame to verify that non-English word columns have been removed
+print(bow_df)
+
+#Word Cloud
+
+# Calculate the sum of each column to get the count of occurrences
+word_counts = bow_df.sum()
+
+# Create a DataFrame with words and their occurrences
+word_occurrences = pd.DataFrame({
+    'Word': word_counts.index,
+    'Occurrences': word_counts.values
+})
+
+# Sort the DataFrame by occurrences in descending order
+word_occurrences_sorted = word_occurrences.sort_values(by='Occurrences', ascending=False)
+
+# Reset the index for a clean table
+word_occurrences_sorted.reset_index(drop=True, inplace=True)
+
+# Display the DataFrame
+print(word_occurrences_sorted)
+
+  #Top occuring words
+
+import matplotlib.pyplot as plt
+
+# Select the top 30 words
+top_words = word_occurrences_sorted.head(30)
+
+# Create a bar plot
+plt.figure(figsize=(10, 8))  # Set the figure size
+plt.bar(top_words['Word'], top_words['Occurrences'], color='blue')  # Create a bar plot
+
+# Add title and labels
+plt.title('Top 30 Occurring Words')
+plt.xlabel('Words')
+plt.ylabel('Occurrences')
+
+# Rotate the x-axis labels for better readability
+plt.xticks(rotation=45, ha="right")
+
+# Show the plot
+plt.show()
+
+
+  #Sentiment Analysis
+
+from textblob import TextBlob
+
+def analyze_sentiment(text):
+    blob = TextBlob(text)  # Create a TextBlob object
+    polarity = blob.sentiment.polarity  # Get the polarity score
+    if polarity > 0:
+        sentiment = "Positive"
+    elif polarity < 0:
+        sentiment = "Negative"
+    else:
+        sentiment = "Neutral"
+    return sentiment, polarity
+
+# Apply the analyze_sentiment function to each review in the DataFrame
+df['Sentiment'], df['Polarity'] = zip(*df['text_reviews_'].apply(analyze_sentiment))
+
+# Display the DataFrame to verify the sentiment and polarity columns
+print(df)
+
+# Calculate the average of the 'Polarity' column
+
+print("Average Polarity:", df['Polarity'].mean())
+
+
+  #Semi-supervised learning for emotion prediction
+
+  import pandas as pd
+import numpy as np
+import re
+
+from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
+from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import f1_score
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer
+from sklearn.semi_supervised import LabelSpreading
+from sklearn.metrics import confusion_matrix, accuracy_score, classification_report
+
+  unlabeled_data = df[df['emotions_'].isna()][['lemmatized_text']]
+unlabeled_data['emotions_'] = -1
+print(unlabeled_data)
+
+  # Define labeled data as data where "emotions_" is not missing
+labeled_data = df[df['emotions_'].notna() & (df['emotions_'] != 'NaN')]
+# Extract labels from labeled_data
+y_labeled = labeled_data['emotions_']
+y_unlabeled = unlabeled_data['emotions_']
+X_labeled = labeled_data['lemmatized_text']
+X_unlabeled = unlabeled_data['lemmatized_text']
+
+print("y_labeled ",y_labeled )
+print("y_unlabeled",y_unlabeled)
+print("X_unlabeled",X_unlabeled)
+print("X_labeled",X_labeled)
+print(df)
+
+# Parameters
+sdg_params = dict(alpha=1e-5, penalty="l2", loss="log_loss")
+vectorizer_params = dict(ngram_range=(1, 2), min_df=1, max_df=0.8)
+
+# Supervised Pipeline
+pipeline = Pipeline(
+    [
+        ("vect", CountVectorizer(**vectorizer_params)),
+        ("tfidf", TfidfTransformer()),
+        ("clf", SGDClassifier(**sdg_params)),
+    ]
+)
+
+# LabelSpreading Pipeline
+ls_pipeline = Pipeline(
+    [
+        ("vect", CountVectorizer(**vectorizer_params)),
+        ("tfidf", TfidfTransformer()),
+        ("toarray", FunctionTransformer(lambda x: x.toarray())),
+        ("clf", LabelSpreading(kernel='rbf', gamma=20, n_neighbors=7, alpha=0.2, max_iter=30, tol=0.001, n_jobs=None)),
+    ]
+)
+
+  def eval_and_print_metrics(clf, X_train, y_train, X_test, y_test):
+    print("Number of training samples:", len(X_train))
+    print("Unlabeled samples in training set:", sum(1 for x in y_train if x == -1)) #if x == 'NaN'
+    clf.fit(X_train, y_train)
+    y_pred = clf.predict(X_test)
+
+    print(
+        "Micro-averaged F1 score on test set: %0.3f"
+        % f1_score(y_test, y_pred, average="micro")
+    )
+    print("\nConfusion Matrix:\n", confusion_matrix(y_test,y_pred))
+    print("\nClassification Report:\n", classification_report(y_test, y_pred,zero_division=1))
+    print("\n\n")
+
+  X_train, X_test, y_train, y_test = train_test_split(X_labeled, y_labeled, test_size=0.2, stratify=y_labeled, random_state=42)
+
+  print("Supervised SGDClassifier on the labeled data:")
+eval_and_print_metrics(pipeline, X_train, y_train, X_test, y_test)
+
+print("Label Spreading on the labeled data:")
+eval_and_print_metrics(ls_pipeline, X_train, y_train, X_test, y_test)
+
+test_indices = X_test.index
+
+# Exclude test data from X_labeled and y_labeled based on the identified indices
+X_labeled_filtered = X_labeled.drop(index=test_indices, errors='ignore')
+y_labeled_filtered = y_labeled.drop(index=test_indices, errors='ignore')
+
+# Concatenate the filtered labeled data with the unlabeled data
+X=X_combined = pd.concat([X_labeled_filtered, X_unlabeled])
+y=y_combined = pd.concat([y_labeled_filtered, y_unlabeled])
+
+  # Define the mapping for labels
+label_mapping = {'anger': 1, 'disgust': 2, 'fear': 3, 'joy': 4, 'neutral': 5, 'sadness': 6, "surprise": 7,-1:-1 }
+
+# Apply the mapping to labels
+y  = [label_mapping[label] for label in y]
+y_test  = [label_mapping[label] for label in y_test]
+
+
+print("Label  Classifier on the labeled and unlabeled data:")
+eval_and_print_metrics(ls_pipeline, X, y, X_test, y_test)
+
+print(df)
+
+#Imputing predicted emotions
+predicted_emotions = ls_pipeline.predict(X_unlabeled)
+print(predicted_emotions)
+
+# Add predicted labels to the unlabeled data DataFrame
+unlabeled_data['emotions_'] = predicted_emotions
+
+  combined_data = pd.concat([labeled_data, unlabeled_data])
+print(combined_data)
+
+# Replace the 'emotions_' column in the original DataFrame
+df['emotions_'] = combined_data['emotions_']
+
+  # Check for any remaining NaNs in 'emotions_'
+print(df['emotions_'].isna().sum())
+
+print(df.head())
+
+
+  #Changing the original labels in emotions_ to numeric mapping
+
+emotion_mapping = {
+    'anger': 1,
+    'disgust': 2,
+    'fear': 3,
+    'joy': 4,
+    'neutral': 5,
+    'sadness': 6,
+    'surprise': 7
+}
+df['emotions_'] = df['emotions_'].replace(emotion_mapping)
+
+print(df)
+
+#Count of Emotions
+
+# Count the occurrences of each emotion and sort them
+emotion_counts = df['emotions_'].value_counts().sort_index()
+
+emotion_labels = {
+    1: 'anger',
+    2: 'disgust',
+    3: 'fear',
+    4: 'joy',
+    5: 'neutral',
+    6: 'sadness',
+    7: 'surprise'
+}
+
+# Set the figure size
+plt.figure(figsize=(10, 6))
+
+# Create a bar plot
+plt.bar(emotion_counts.index.map(emotion_labels), emotion_counts.values, color='skyblue')
+
+# Add labels and title
+plt.xlabel('Emotions')
+plt.ylabel('Count')
+plt.title('Count of Each Emotion')
+
+# Rotate the x-axis labels for better readability
+plt.xticks(rotation=45)
+
+# Show the plot
+plt.show()
+
+  #Supervised Machine Learning to predict sentiment
+
+X_train2, X_test2, y_train2, y_test2 = train_test_split(df['lemmatized_text'], df['Sentiment'], test_size=0.2, random_state=42)
+
+  from sklearn.feature_extraction.text import TfidfVectorizer
+tfidf_vectorizer = TfidfVectorizer()
+X_train_tfidf = tfidf_vectorizer.fit_transform(X_train2)
+X_test_tfidf = tfidf_vectorizer.transform(X_test2)
+
+  #SUPERVISED LEARNING, Support Vector Classifier
+
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import confusion_matrix, accuracy_score, classification_report
+
+clf_SVC = SVC(kernel='linear')
+clf_SVC.fit(X_train_tfidf, y_train2)
+y_pred2 = clf_SVC.predict(X_test_tfidf) # Predict on the test set
+print("\nConfusion Matrix:\n", confusion_matrix(y_test2, y_pred2))
+print("\nAccuracy:", accuracy_score(y_test2, y_pred2))
+print("\nClassification Report:\n", classification_report(y_test2, y_pred2))
+
+  #Visualizations for Brand H
+
+# Filter the DataFrame for brand H_
+df_h = df[df['brand_name_'] == 'H_']
+
+# Count the occurrences of each emotion for brand H_
+emotion_counts_h = df_h['emotions_'].value_counts().sort_index()
+
+# Create a bar plot for emotions
+plt.figure(figsize=(10, 6))
+plt.bar(emotion_counts_h.index.map(emotion_labels), emotion_counts_h.values, color='skyblue')  # Assuming emotion_labels mapping exists
+plt.xlabel('Emotions')
+plt.ylabel('Count')
+plt.title('Count of Each Emotion for Brand H_')
+plt.xticks(rotation=45)
+plt.show()
+
+  # Count the occurrences of each star rating for brand H_
+star_counts_h = df_h['star_rating_'].value_counts().sort_index()
+
+# Create a bar plot for star ratings
+plt.figure(figsize=(10, 6))
+plt.bar(star_counts_h.index, star_counts_h.values, color='green')
+plt.xlabel('Star Ratings')
+plt.ylabel('Count')
+plt.title('Count of Each Star Rating for Brand H_')
+plt.xticks(rotation=0)  # Star ratings are usually better viewed without rotation
+plt.show()
+
+
+  # Calculate the average polarity for brand H_
+average_polarity_h = df_h['Polarity'].mean()
+
+# Print the average polarity
+print("Average Polarity for Brand H_:", average_polarity_h)
+
+  # Initialize the vectorizer
+vectorizer = CountVectorizer()
+
+# Fit and transform the text data
+X = vectorizer.fit_transform(df_h['lemmatized_text'])
+
+# Convert to a DataFrame
+word_counts_df = pd.DataFrame(X.toarray(), columns=vectorizer.get_feature_names_out())
+
+# Sum occurrences across all documents to get total counts per word
+word_counts = word_counts_df.sum().sort_values(ascending=False)
+
+# Create a DataFrame with words and their occurrences
+word_occurrences_sorted = pd.DataFrame({
+    'Word': word_counts.index,
+    'Occurrences': word_counts.values
+}).sort_values(by='Occurrences', ascending=False)
+
+# Select the top 30 words for brand H_
+top_words_h = word_occurrences_sorted.head(30)
+
+# Create a bar plot
+plt.figure(figsize=(12, 9))  # Adjust the figure size as needed
+plt.bar(top_words_h['Word'], top_words_h['Occurrences'], color='blue')  # Create a bar plot
+
+# Add title and labels
+plt.title('Top 30 Occurring Words for Brand H_')
+plt.xlabel('Words')
+plt.ylabel('Occurrences')
+
+# Rotate the x-axis labels for better readability
+plt.xticks(rotation=45, ha="right")
+
+# Show the plot
+plt.show()
+
+  #Visualizations for Brand Z_
+
+# Filter the DataFrame for brand Z_
+df_z = df[df['brand_name_'] == 'Z_']
+
+# Count the occurrences of each emotion for brand Z_
+emotion_counts_z = df_z['emotions_'].value_counts().sort_index()
+
+# Create a bar plot for emotions
+plt.figure(figsize=(10, 6))
+plt.bar(emotion_counts_z.index.map(emotion_labels), emotion_counts_z.values, color='skyblue')  # Assuming emotion_labels mapping exists
+plt.xlabel('Emotions')
+plt.ylabel('Count')
+plt.title('Count of Each Emotion for Brand Z_')
+plt.xticks(rotation=45)
+plt.show()
+
+  # Count the occurrences of each star rating for brand Z_
+star_counts_z = df_z['star_rating_'].value_counts().sort_index()
+
+# Create a bar plot for star ratings
+plt.figure(figsize=(10, 6))
+plt.bar(star_counts_z.index, star_counts_z.values, color='green')
+plt.xlabel('Star Ratings')
+plt.ylabel('Count')
+plt.title('Count of Each Star Rating for Brand Z_')
+plt.xticks(rotation=0)  # Star ratings are numeric and typically don't need rotation
+plt.show()
+
+
+  # Calculate the average polarity for brand Z_
+average_polarity_z = df_z['Polarity'].mean()
+
+# Print the average polarity
+print("Average Polarity for Brand Z_:", average_polarity_z)
+
+  # Initialize the vectorizer
+vectorizer = CountVectorizer()
+
+# Fit and transform the text data
+X = vectorizer.fit_transform(df_z['lemmatized_text'])
+
+# Convert to a DataFrame
+word_counts_df = pd.DataFrame(X.toarray(), columns=vectorizer.get_feature_names_out())
+
+# Sum occurrences across all documents to get total counts per word
+word_counts = word_counts_df.sum().sort_values(ascending=False)
+
+# Create a DataFrame with words and their occurrences
+word_occurrences_sorted = pd.DataFrame({
+    'Word': word_counts.index,
+    'Occurrences': word_counts.values
+}).sort_values(by='Occurrences', ascending=False)
+
+# Select the top 30 words for brand Z_
+top_words_z = word_occurrences_sorted.head(30)
+
+# Create a bar plot
+plt.figure(figsize=(12, 9))  # Adjust the figure size as needed
+plt.bar(top_words_z['Word'], top_words_z['Occurrences'], color='blue')  # Create a bar plot
+
+# Add title and labels
+plt.title('Top 30 Occurring Words for Brand Z_')
+plt.xlabel('Words')
+plt.ylabel('Occurrences')
+
+# Rotate the x-axis labels for better readability
+plt.xticks(rotation=45, ha="right")
+
+# Show the plot
+plt.show()
+
+  # Count the occurrences of each brand
+brand_counts = df['brand_name_'].value_counts()
+print(brand_counts)
+
+# Set up the matplotlib figure
+plt.figure(figsize=(8, 5))
+
+# Create a bar plot
+plt.bar(brand_counts.index, brand_counts.values, color='teal')
+
+# Add labels and title
+plt.xlabel('Brand Name')
+plt.ylabel('Number of Rows')
+plt.title('Count of Rows for Each Brand')
+
+# Show the plot
+plt.show()
+
+  
+  
