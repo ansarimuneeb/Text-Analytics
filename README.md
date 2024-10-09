@@ -1,1 +1,1 @@
-Refer to the report of this project for detailed interpretation of the results.
+Refer to the "Sentiment Analysis Report.pdf" for detailed interpretation of the results.
