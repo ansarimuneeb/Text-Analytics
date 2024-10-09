@@ -1,1 +1,1 @@
-The following project analyzed sentiments on an online retail website through customer reviews.
+Refer to the report of this project for detailed interpretation of the results.
